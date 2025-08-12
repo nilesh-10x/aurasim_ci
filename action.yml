@@ -1,0 +1,51 @@
+name: "AuraSIM CI"
+description: "Run robotic simulations using AuraSIM in CI/CD pipelines"
+author: "auraml"
+
+branding:
+  icon: "play-circle"
+  color: "blue"
+
+inputs:
+  usd_path:
+    description: "Path to the USD (Universal Scene Description) file for the simulation"
+    required: true
+
+  robot_docker_image:
+    description: "Docker image containing the robot software stack"
+    required: true
+
+  robot_start_cmd:
+    description: "Command to start the robot in the container"
+    required: true
+
+  timeout:
+    description: "Timeout for the simulation in seconds"
+    required: false
+    default: "300"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup AuraSIM Environment
+      shell: bash
+      run: |
+        echo "Setting up AuraSIM CI environment..."
+        mkdir -p ${{ inputs.output_directory }}
+        echo "OUTPUT_DIR=${{ inputs.output_directory }}" >> $GITHUB_ENV
+        echo "SIMULATION_START_TIME=$(date +%s)" >> $GITHUB_ENV
+
+    - name: Validate Inputs
+      shell: bash
+      run: |
+        if [ ! -f "${{ inputs.usd_path }}" ]; then
+          echo "Error: USD file not found at ${{ inputs.usd_path }}"
+          exit 1
+        fi
+        echo "USD file validated: ${{ inputs.usd_path }}"
+
+        # Validate Docker image exists
+        if ! docker image inspect ${{ inputs.robot_docker_image }} > /dev/null 2>&1; then
+          echo "Pulling Docker image: ${{ inputs.robot_docker_image }}"
+          docker pull ${{ inputs.robot_docker_image }}
+        fi
