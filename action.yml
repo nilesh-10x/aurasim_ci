@@ -31,8 +31,6 @@ runs:
       shell: bash
       run: |
         echo "Setting up AuraSIM CI environment..."
-        mkdir -p ${{ inputs.output_directory }}
-        echo "OUTPUT_DIR=${{ inputs.output_directory }}" >> $GITHUB_ENV
         echo "SIMULATION_START_TIME=$(date +%s)" >> $GITHUB_ENV
 
     - name: Validate Inputs
