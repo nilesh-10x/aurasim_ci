@@ -77,6 +77,9 @@ runs:
       run: |
         echo "=== Step 2: Starting Isaac Sim with USD file ==="
 
+        # Ensure output directory exists
+        mkdir -p ./aurasim_output
+
         # Create a Docker network for communication between containers
         docker network create aurasim-network-${{ github.run_id }} || true
 
