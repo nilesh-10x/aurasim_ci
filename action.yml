@@ -80,6 +80,9 @@ runs:
         # Create a Docker network for communication between containers
         docker network create aurasim-network-${{ github.run_id }} || true
 
+        # Copy the USD loader script to the output directory
+        cp load_usd_stage.py ./aurasim_output/
+
         # Start Isaac Sim container in background
         docker run -d \
           --name $ISAAC_SIM_CONTAINER_NAME \
@@ -89,43 +92,19 @@ runs:
           --network aurasim-network-${{ github.run_id }} \
           -e "ACCEPT_EULA=Y" \
           -e "PRIVACY_CONSENT=Y" \
-          -e USD_FILE="/workspace/$(basename $USD_ABSOLUTE_PATH)" \
-          -e HEADLESS=true \
-          -e DISPLAY=:0 \
+          -e "HEADLESS=true" \
+          -e "DISPLAY=:0" \
           -v "$(dirname $USD_ABSOLUTE_PATH):/workspace" \
           -v "./aurasim_output:/output" \
           ${{ inputs.isaac_sim_image }} \
-          bash -c "
-            echo 'Starting Isaac Sim with USD file...' && \
-            /isaac-sim/python.sh -c '
-            import omni.isaac.core
-            from omni.isaac.core import World
-            import time
-            import os
-            
-            # Load USD file
-            usd_path = os.environ.get(\"USD_FILE\", \"/workspace/$(basename $USD_ABSOLUTE_PATH)\")
-            print(f\"Loading USD file: {usd_path}\")
-            
-            # Initialize simulation
-            world = World(stage_units_in_meters=1.0)
-            world.scene.add_default_ground_plane()
-            
-            # Load the USD scene
-            from pxr import Usd, UsdGeom
-            stage = omni.usd.get_context().get_stage()
-            stage.GetRootLayer().Import(usd_path)
-            
-            print(\"Isaac Sim ready with USD scene loaded\")
-            
-            # Keep simulation running and wait for exit signal
-            while not os.path.exists(\"/tmp/stop_simulation\"):
-                world.step(render=False)
-                time.sleep(0.1)
-            
-            print(\"Isaac Sim shutting down...\")
-            world.stop()
-            ' 2>&1 | tee /output/isaac_sim.log
+          -c "
+            echo 'Starting Isaac Sim with USD stage loader...' && \
+            /isaac-sim/python.sh /output/load_usd_stage.py \
+              --usd_path /workspace/$(basename $USD_ABSOLUTE_PATH) \
+              --headless \
+              --timeout ${{ inputs.timeout }} \
+              --output_dir /output \
+              2>&1 | tee /output/isaac_sim.log
           "
 
         # Wait for Isaac Sim to be ready
