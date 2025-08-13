@@ -83,13 +83,17 @@ runs:
         # Start Isaac Sim container in background
         docker run -d \
           --name $ISAAC_SIM_CONTAINER_NAME \
-          --network aurasim-network-${{ github.run_id }} \
+          --entrypoint bash \
+          --runtime=nvidia \
           --gpus all \
-          -v "$(dirname $USD_ABSOLUTE_PATH):/workspace" \
-          -v "./aurasim_output:/output" \
+          --network aurasim-network-${{ github.run_id }} \
+          -e "ACCEPT_EULA=Y" \
+          -e "PRIVACY_CONSENT=Y" \
           -e USD_FILE="/workspace/$(basename $USD_ABSOLUTE_PATH)" \
           -e HEADLESS=true \
           -e DISPLAY=:0 \
+          -v "$(dirname $USD_ABSOLUTE_PATH):/workspace" \
+          -v "./aurasim_output:/output" \
           ${{ inputs.isaac_sim_image }} \
           bash -c "
             echo 'Starting Isaac Sim with USD file...' && \
