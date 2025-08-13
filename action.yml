@@ -24,6 +24,11 @@ inputs:
     required: false
     default: "300"
 
+  isaac_sim_image:
+    description: "Docker image for Isaac Sim"
+    required: false
+    default: "nvcr.io/nvidia/isaac-sim:5.0.0"
+
 runs:
   using: "composite"
   steps:
@@ -32,18 +37,232 @@ runs:
       run: |
         echo "Setting up AuraSIM CI environment..."
         echo "SIMULATION_START_TIME=$(date +%s)" >> $GITHUB_ENV
+        echo "ISAAC_SIM_CONTAINER_NAME=isaac-sim-${{ github.run_id }}" >> $GITHUB_ENV
+        echo "ROBOT_CONTAINER_NAME=robot-${{ github.run_id }}" >> $GITHUB_ENV
 
     - name: Validate Inputs
       shell: bash
       run: |
+        echo "=== Validating USD path ==="
         if [ ! -f "${{ inputs.usd_path }}" ]; then
-          echo "Error: USD file not found at ${{ inputs.usd_path }}"
+          echo "❌ Error: USD file not found at ${{ inputs.usd_path }}"
           exit 1
         fi
-        echo "USD file validated: ${{ inputs.usd_path }}"
+        echo "✅ USD file validated: ${{ inputs.usd_path }}"
 
-        # Validate Docker image exists
+        # Get absolute path for USD file
+        USD_ABSOLUTE_PATH=$(realpath "${{ inputs.usd_path }}")
+        echo "USD_ABSOLUTE_PATH=$USD_ABSOLUTE_PATH" >> $GITHUB_ENV
+        echo "USD absolute path: $USD_ABSOLUTE_PATH"
+
+    # Step 1: Pull the robot Docker
+    - name: "Step 1: Pull Robot Docker Image"
+      shell: bash
+      run: |
+        echo "=== Step 1: Pulling robot Docker image ==="
         if ! docker image inspect ${{ inputs.robot_docker_image }} > /dev/null 2>&1; then
-          echo "Pulling Docker image: ${{ inputs.robot_docker_image }}"
+          echo "📥 Pulling Docker image: ${{ inputs.robot_docker_image }}"
           docker pull ${{ inputs.robot_docker_image }}
+        else
+          echo "✅ Robot Docker image already exists: ${{ inputs.robot_docker_image }}"
+        fi
+
+        # Also pull Isaac Sim image
+        echo "📥 Pulling Isaac Sim Docker image: ${{ inputs.isaac_sim_image }}"
+        docker pull ${{ inputs.isaac_sim_image }}
+
+    # Step 2: Start Isaac Sim with the USD
+    - name: "Step 2: Start Isaac Sim with USD"
+      shell: bash
+      run: |
+        echo "=== Step 2: Starting Isaac Sim with USD file ==="
+
+        # Create a Docker network for communication between containers
+        docker network create aurasim-network-${{ github.run_id }} || true
+
+        # Start Isaac Sim container in background
+        docker run -d \
+          --name $ISAAC_SIM_CONTAINER_NAME \
+          --network aurasim-network-${{ github.run_id }} \
+          --gpus all \
+          -v "$(dirname $USD_ABSOLUTE_PATH):/workspace" \
+          -v "./aurasim_output:/output" \
+          -e USD_FILE="/workspace/$(basename $USD_ABSOLUTE_PATH)" \
+          -e HEADLESS=true \
+          -e DISPLAY=:0 \
+          ${{ inputs.isaac_sim_image }} \
+          bash -c "
+            echo 'Starting Isaac Sim with USD file...' && \
+            /isaac-sim/python.sh -c '
+            import omni.isaac.core
+            from omni.isaac.core import World
+            import time
+            import os
+            
+            # Load USD file
+            usd_path = os.environ.get(\"USD_FILE\", \"/workspace/$(basename $USD_ABSOLUTE_PATH)\")
+            print(f\"Loading USD file: {usd_path}\")
+            
+            # Initialize simulation
+            world = World(stage_units_in_meters=1.0)
+            world.scene.add_default_ground_plane()
+            
+            # Load the USD scene
+            from pxr import Usd, UsdGeom
+            stage = omni.usd.get_context().get_stage()
+            stage.GetRootLayer().Import(usd_path)
+            
+            print(\"Isaac Sim ready with USD scene loaded\")
+            
+            # Keep simulation running and wait for exit signal
+            while not os.path.exists(\"/tmp/stop_simulation\"):
+                world.step(render=False)
+                time.sleep(0.1)
+            
+            print(\"Isaac Sim shutting down...\")
+            world.stop()
+            ' 2>&1 | tee /output/isaac_sim.log
+          "
+
+        # Wait for Isaac Sim to be ready
+        echo "⏳ Waiting for Isaac Sim to initialize..."
+        sleep 10
+
+        # Check if Isaac Sim container is running
+        if docker ps --filter "name=$ISAAC_SIM_CONTAINER_NAME" --filter "status=running" | grep -q $ISAAC_SIM_CONTAINER_NAME; then
+          echo "✅ Isaac Sim started successfully"
+        else
+          echo "❌ Failed to start Isaac Sim"
+          docker logs $ISAAC_SIM_CONTAINER_NAME
+          exit 1
+        fi
+
+    # Step 3: Start the robot Docker
+    - name: "Step 3: Start Robot Docker Container"
+      shell: bash
+      run: |
+        echo "=== Step 3: Starting robot Docker container ==="
+
+        # Start robot container
+        docker run -d \
+          --name $ROBOT_CONTAINER_NAME \
+          --network aurasim-network-${{ github.run_id }} \
+          -v "./aurasim_output:/output" \
+          -e ISAAC_SIM_HOST=$ISAAC_SIM_CONTAINER_NAME \
+          -e OUTPUT_DIR=/output \
+          ${{ inputs.robot_docker_image }} \
+          tail -f /dev/null
+
+        # Check if robot container is running
+        if docker ps --filter "name=$ROBOT_CONTAINER_NAME" --filter "status=running" | grep -q $ROBOT_CONTAINER_NAME; then
+          echo "✅ Robot container started successfully"
+        else
+          echo "❌ Failed to start robot container"
+          docker logs $ROBOT_CONTAINER_NAME
+          exit 1
+        fi
+
+    # Step 4: Invoke the robot start command
+    - name: "Step 4: Execute Robot Start Command"
+      shell: bash
+      run: |
+        echo "=== Step 4: Executing robot start command ==="
+        echo "🤖 Running command: ${{ inputs.robot_start_cmd }}"
+
+        # Execute the robot command in the container
+        docker exec $ROBOT_CONTAINER_NAME bash -c "
+          cd /workspace || cd / && \
+          echo 'Starting robot application...' && \
+          ${{ inputs.robot_start_cmd }} 2>&1 | tee /output/robot.log
+        " &
+
+        ROBOT_PID=$!
+        echo "ROBOT_PID=$ROBOT_PID" >> $GITHUB_ENV
+        echo "✅ Robot command started with PID: $ROBOT_PID"
+
+    # Step 5: Wait till exit signal
+    - name: "Step 5: Monitor Simulation and Wait for Exit"
+      shell: bash
+      run: |
+        echo "=== Step 5: Monitoring simulation progress ==="
+
+        TIMEOUT_SECONDS=${{ inputs.timeout }}
+        ELAPSED=0
+        ROBOT_FINISHED=false
+
+        while [ $ELAPSED -lt $TIMEOUT_SECONDS ]; do
+          # Check if robot process is still running
+          if ! kill -0 $ROBOT_PID 2>/dev/null; then
+            echo "🤖 Robot process has finished"
+            ROBOT_FINISHED=true
+            break
+          fi
+          
+          # Check container health
+          if ! docker ps --filter "name=$ISAAC_SIM_CONTAINER_NAME" --filter "status=running" | grep -q $ISAAC_SIM_CONTAINER_NAME; then
+            echo "❌ Isaac Sim container stopped unexpectedly"
+            exit 1
+          fi
+          
+          if ! docker ps --filter "name=$ROBOT_CONTAINER_NAME" --filter "status=running" | grep -q $ROBOT_CONTAINER_NAME; then
+            echo "❌ Robot container stopped unexpectedly"
+            exit 1
+          fi
+          
+          echo "⏳ Simulation running... (${ELAPSED}/${TIMEOUT_SECONDS}s)"
+          sleep 5
+          ELAPSED=$((ELAPSED + 5))
+        done
+
+        # Signal Isaac Sim to stop
+        docker exec $ISAAC_SIM_CONTAINER_NAME touch /tmp/stop_simulation
+
+        if [ "$ROBOT_FINISHED" = "false" ]; then
+          echo "⏰ Simulation timed out after $TIMEOUT_SECONDS seconds"
+          echo "SIMULATION_STATUS=timeout" >> $GITHUB_ENV
+        else
+          echo "✅ Simulation completed within timeout"
+          echo "SIMULATION_STATUS=completed" >> $GITHUB_ENV
+        fi
+
+    # Step 6: Exit (success/failure)
+    - name: "Step 6: Cleanup and Determine Exit Status"
+      shell: bash
+      if: always()
+      run: |
+        echo "=== Step 6: Cleanup and exit status determination ==="
+
+        # Get robot exit code
+        ROBOT_EXIT_CODE=0
+        if [ -n "$ROBOT_PID" ]; then
+          wait $ROBOT_PID
+          ROBOT_EXIT_CODE=$?
+        fi
+
+        # Collect logs
+        echo "📋 Collecting logs..."
+        docker logs $ISAAC_SIM_CONTAINER_NAME > ./aurasim_output/isaac_sim_container.log 2>&1 || true
+        docker logs $ROBOT_CONTAINER_NAME > ./aurasim_output/robot_container.log 2>&1 || true
+
+        # Cleanup containers and network
+        echo "🧹 Cleaning up containers..."
+        docker stop $ISAAC_SIM_CONTAINER_NAME $ROBOT_CONTAINER_NAME || true
+        docker rm $ISAAC_SIM_CONTAINER_NAME $ROBOT_CONTAINER_NAME || true
+        docker network rm aurasim-network-${{ github.run_id }} || true
+
+        # Calculate duration
+        SIMULATION_END_TIME=$(date +%s)
+        DURATION=$((SIMULATION_END_TIME - SIMULATION_START_TIME))
+        echo "⏱️  Total simulation duration: ${DURATION} seconds"
+
+        # Determine final status
+        if [ "$SIMULATION_STATUS" = "timeout" ]; then
+          echo "❌ FINAL STATUS: TIMEOUT (after ${{ inputs.timeout }} seconds)"
+          exit 1
+        elif [ $ROBOT_EXIT_CODE -eq 0 ]; then
+          echo "✅ FINAL STATUS: SUCCESS (robot exited cleanly)"
+          exit 0
+        else
+          echo "❌ FINAL STATUS: FAILURE (robot exit code: $ROBOT_EXIT_CODE)"
+          exit 1
         fi
