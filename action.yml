@@ -37,8 +37,8 @@ runs:
       run: |
         echo "Setting up AuraSIM CI environment..."
         echo "SIMULATION_START_TIME=$(date +%s)" >> $GITHUB_ENV
-        echo "ISAAC_SIM_CONTAINER_NAME=isaac-sim-${{ github.run_id }}" >> $GITHUB_ENV
-        echo "ROBOT_CONTAINER_NAME=robot-${{ github.run_id }}" >> $GITHUB_ENV
+        echo "ISAAC_SIM_CONTAINER_NAME=isaac-sim-ci" >> $GITHUB_ENV
+        echo "ROBOT_CONTAINER_NAME=robot-ci" >> $GITHUB_ENV
 
     - name: Validate Inputs
       shell: bash
