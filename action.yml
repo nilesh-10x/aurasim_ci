@@ -289,11 +289,7 @@ runs:
         echo "🤖 Running command: ${{ inputs.robot_start_cmd }}"
 
         # Execute the robot command in the container
-        docker exec $ROBOT_CONTAINER_NAME bash -c "
-          cd /workspace || cd / && \
-          echo 'Starting robot application...' && \
-          ${{ inputs.robot_start_cmd }} 2>&1 | tee /output/robot.log
-        " &
+        docker exec $ROBOT_CONTAINER_NAME ${{ inputs.robot_start_cmd }} &
 
         ROBOT_PID=$!
         echo "ROBOT_PID=$ROBOT_PID" >> $GITHUB_ENV
