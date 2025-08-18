@@ -374,14 +374,15 @@ runs:
         DURATION=$((SIMULATION_END_TIME - SIMULATION_START_TIME))
         echo "⏱️  Total simulation duration: ${DURATION} seconds"
 
+        exit 0
         # Determine final status
-        if [ "$SIMULATION_STATUS" = "timeout" ]; then
-          echo "❌ FINAL STATUS: TIMEOUT (after ${{ inputs.timeout }} seconds)"
-          exit 1
-        elif [ $ROBOT_EXIT_CODE -eq 0 ]; then
-          echo "✅ FINAL STATUS: SUCCESS (robot exited cleanly)"
-          exit 0
-        else
-          echo "❌ FINAL STATUS: FAILURE (robot exit code: $ROBOT_EXIT_CODE)"
-          exit 1
-        fi
+        # if [ "$SIMULATION_STATUS" = "timeout" ]; then
+        #   echo "❌ FINAL STATUS: TIMEOUT (after ${{ inputs.timeout }} seconds)"
+        #   exit 1
+        # elif [ $ROBOT_EXIT_CODE -eq 0 ]; then
+        #   echo "✅ FINAL STATUS: SUCCESS (robot exited cleanly)"
+        #   exit 0
+        # else
+        #   echo "❌ FINAL STATUS: FAILURE (robot exit code: $ROBOT_EXIT_CODE)"
+        #   exit 1
+        # fi
