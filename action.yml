@@ -352,10 +352,10 @@ runs:
       run: |
         echo "=== Step 6: Cleanup and exit status determination ==="
 
-        # Get robot exit code from container
+        # Get robot exit code from container before removing it
         ROBOT_EXIT_CODE=0
         if docker ps -a --filter "name=$ROBOT_CONTAINER_NAME" --format "table {{.Names}}" | grep -q $ROBOT_CONTAINER_NAME; then
-          ROBOT_EXIT_CODE=$(docker wait $ROBOT_CONTAINER_NAME 2>/dev/null || echo "1")
+          ROBOT_EXIT_CODE=$(docker inspect $ROBOT_CONTAINER_NAME --format='{{.State.ExitCode}}' 2>/dev/null || echo "1")
           echo "🤖 Robot container exit code: $ROBOT_EXIT_CODE"
         fi
 
@@ -364,10 +364,9 @@ runs:
         docker logs $ISAAC_SIM_CONTAINER_NAME > ./aurasim_output/isaac_sim_container.log 2>&1 || true
         docker logs $ROBOT_CONTAINER_NAME > ./aurasim_output/robot_container.log 2>&1 || true
 
-        # Cleanup containers and network
+        # Cleanup containers and network (force removal)
         echo "🧹 Cleaning up containers..."
-        docker stop $ISAAC_SIM_CONTAINER_NAME $ROBOT_CONTAINER_NAME || true
-        docker rm $ISAAC_SIM_CONTAINER_NAME $ROBOT_CONTAINER_NAME || true
+        docker rm -f $ISAAC_SIM_CONTAINER_NAME $ROBOT_CONTAINER_NAME || true
         docker network rm aurasim-network-${{ github.run_id }} || true
 
         # Calculate duration
