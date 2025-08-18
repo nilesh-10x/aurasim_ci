@@ -266,6 +266,7 @@ runs:
           --name $ROBOT_CONTAINER_NAME \
           --network aurasim-network-${{ github.run_id }} \
           -v "./aurasim_output:/output" \
+          -v "/home/ubuntu/persistentStorage/logs:/tmp/logs" \
           -e ISAAC_SIM_HOST=$ISAAC_SIM_CONTAINER_NAME \
           -e OUTPUT_DIR=/output \
           ${{ inputs.robot_docker_image }} \
