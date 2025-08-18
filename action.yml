@@ -71,6 +71,11 @@ runs:
         echo "📥 Pulling Isaac Sim Docker image: ${{ inputs.isaac_sim_image }}"
         docker pull ${{ inputs.isaac_sim_image }}
 
+        # Clean up any existing containers with the same names
+        echo "🧹 Cleaning up any existing containers..."
+        docker rm -f $ISAAC_SIM_CONTAINER_NAME $ROBOT_CONTAINER_NAME 2>/dev/null || true
+        docker network rm aurasim-network-${{ github.run_id }} 2>/dev/null || true
+
     # Step 2: Start Isaac Sim with the USD
     - name: "Step 2: Start Isaac Sim with USD"
       shell: bash
