@@ -347,11 +347,11 @@ runs:
       run: |
         echo "=== Step 6: Cleanup and exit status determination ==="
 
-        # Get robot exit code
+        # Get robot exit code from container
         ROBOT_EXIT_CODE=0
-        if [ -n "$ROBOT_PID" ]; then
-          wait $ROBOT_PID
-          ROBOT_EXIT_CODE=$?
+        if docker ps -a --filter "name=$ROBOT_CONTAINER_NAME" --format "table {{.Names}}" | grep -q $ROBOT_CONTAINER_NAME; then
+          ROBOT_EXIT_CODE=$(docker wait $ROBOT_CONTAINER_NAME 2>/dev/null || echo "1")
+          echo "🤖 Robot container exit code: $ROBOT_EXIT_CODE"
         fi
 
         # Collect logs
