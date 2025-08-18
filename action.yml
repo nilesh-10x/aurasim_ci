@@ -60,12 +60,7 @@ runs:
       shell: bash
       run: |
         echo "=== Step 1: Pulling robot Docker image ==="
-        if ! docker image inspect ${{ inputs.robot_docker_image }} > /dev/null 2>&1; then
-          echo "📥 Pulling Docker image: ${{ inputs.robot_docker_image }}"
-          docker pull ${{ inputs.robot_docker_image }}
-        else
-          echo "✅ Robot Docker image already exists: ${{ inputs.robot_docker_image }}"
-        fi
+        docker pull ${{ inputs.robot_docker_image }}
 
         # Also pull Isaac Sim image
         echo "📥 Pulling Isaac Sim Docker image: ${{ inputs.isaac_sim_image }}"
