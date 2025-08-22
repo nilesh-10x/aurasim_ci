@@ -289,7 +289,7 @@ runs:
         echo "🤖 Running command: ${{ inputs.robot_start_cmd }}"
 
         # Execute the robot command in the container
-        docker exec -d devcontainer-ros2_dev-1 ${{ inputs.robot_start_cmd }} &
+        docker exec -d devcontainer-ros2_dev-1 ${{ inputs.robot_start_cmd }}
 
         ROBOT_PID=$!
         echo "ROBOT_PID=$ROBOT_PID" >> $GITHUB_ENV
