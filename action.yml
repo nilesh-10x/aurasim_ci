@@ -39,6 +39,7 @@ runs:
         echo "SIMULATION_START_TIME=$(date +%s)" >> $GITHUB_ENV
         echo "ISAAC_SIM_CONTAINER_NAME=isaac-sim-ci" >> $GITHUB_ENV
         echo "ROBOT_CONTAINER_NAME=robot-ci" >> $GITHUB_ENV
+        
 
     # - name: Validate Inputs
     #   shell: bash
@@ -260,6 +261,8 @@ runs:
       shell: bash
       run: |
         echo "=== Step 3: Starting robot Docker container with docker compose ==="
+        xhost +local:root
+        export DISPLAY=:0
         cd /home/ubuntu/persistentStorage/10x_ws/10xCode
         docker compose \
           -f .devcontainer/docker-compose.yml \
@@ -325,7 +328,4 @@ runs:
       run: |
         echo "=== Step 6: Cleanup and exit status determination ==="
         cd /home/ubuntu/persistentStorage/10x_ws/10xCode
-        docker compose \
-          -f .devcontainer/docker-compose.yml \
-          -f .devcontainer/docker-compose-pull.yml \
-          down
+        docker stop devcontainer-ros2_dev-1
