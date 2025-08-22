@@ -9,7 +9,7 @@ branding:
 inputs:
   usd_path:
     description: "Path to the USD (Universal Scene Description) file for the simulation"
-    required: true
+    required: false
 
   robot_docker_image:
     description: "Docker image containing the robot software stack"
@@ -40,246 +40,241 @@ runs:
         echo "ISAAC_SIM_CONTAINER_NAME=isaac-sim-ci" >> $GITHUB_ENV
         echo "ROBOT_CONTAINER_NAME=robot-ci" >> $GITHUB_ENV
 
-    - name: Validate Inputs
-      shell: bash
-      run: |
-        echo "=== Validating USD path ==="
-        if [ ! -f "${{ inputs.usd_path }}" ]; then
-          echo "❌ Error: USD file not found at ${{ inputs.usd_path }}"
-          exit 1
-        fi
-        echo "✅ USD file validated: ${{ inputs.usd_path }}"
+    # - name: Validate Inputs
+    #   shell: bash
+    #   run: |
+    #     echo "=== Validating USD path ==="
+    #     if [ ! -f "${{ inputs.usd_path }}" ]; then
+    #       echo "❌ Error: USD file not found at ${{ inputs.usd_path }}"
+    #       exit 1
+    #     fi
+    #     echo "✅ USD file validated: ${{ inputs.usd_path }}"
 
-        # Get absolute path for USD file
-        USD_ABSOLUTE_PATH=$(realpath "${{ inputs.usd_path }}")
-        echo "USD_ABSOLUTE_PATH=$USD_ABSOLUTE_PATH" >> $GITHUB_ENV
-        echo "USD absolute path: $USD_ABSOLUTE_PATH"
+    #     # Get absolute path for USD file
+    #     USD_ABSOLUTE_PATH=$(realpath "${{ inputs.usd_path }}")
+    #     echo "USD_ABSOLUTE_PATH=$USD_ABSOLUTE_PATH" >> $GITHUB_ENV
+    #     echo "USD absolute path: $USD_ABSOLUTE_PATH"
 
-    # Step 1: Pull the robot Docker
-    - name: "Step 1: Pull Robot Docker Image"
-      shell: bash
-      run: |
-        echo "=== Step 1: Pulling robot Docker image ==="
-        docker pull ${{ inputs.robot_docker_image }}
+    # # Step 1: Pull the robot Docker
+    # - name: "Step 1: Pull Robot Docker Image"
+    #   shell: bash
+    #   run: |
+    #     echo "=== Step 1: Pulling robot Docker image ==="
+    #     docker pull ${{ inputs.robot_docker_image }}
 
-        # Also pull Isaac Sim image
-        echo "📥 Pulling Isaac Sim Docker image: ${{ inputs.isaac_sim_image }}"
-        docker pull ${{ inputs.isaac_sim_image }}
+    #     # Also pull Isaac Sim image
+    #     echo "📥 Pulling Isaac Sim Docker image: ${{ inputs.isaac_sim_image }}"
+    #     docker pull ${{ inputs.isaac_sim_image }}
 
-        # Clean up any existing containers with the same names
-        echo "🧹 Cleaning up any existing containers..."
-        docker rm -f $ISAAC_SIM_CONTAINER_NAME $ROBOT_CONTAINER_NAME 2>/dev/null || true
-        docker network rm aurasim-network-${{ github.run_id }} 2>/dev/null || true
+    #     # Clean up any existing containers with the same names
+    #     echo "🧹 Cleaning up any existing containers..."
+    #     docker rm -f $ISAAC_SIM_CONTAINER_NAME $ROBOT_CONTAINER_NAME 2>/dev/null || true
+    #     docker network rm aurasim-network-${{ github.run_id }} 2>/dev/null || true
 
-    # Step 2: Start Isaac Sim with the USD
-    - name: "Step 2: Start Isaac Sim with USD"
-      shell: bash
-      run: |
-        echo "=== Step 2: Starting Isaac Sim with USD file ==="
+    # # Step 2: Start Isaac Sim with the USD
+    # - name: "Step 2: Start Isaac Sim with USD"
+    #   shell: bash
+    #   run: |
+    #     echo "=== Step 2: Starting Isaac Sim with USD file ==="
 
-        # Ensure output directory exists
-        mkdir -p ./aurasim_output
+    #     # Ensure output directory exists
+    #     mkdir -p ./aurasim_output
 
-        # Create a Docker network for communication between containers
-        docker network create aurasim-network-${{ github.run_id }} || true
+    #     # Create a Docker network for communication between containers
+    #     docker network create aurasim-network-${{ github.run_id }} || true
 
-        # Create the USD loader script dynamically
-        cat > ./aurasim_output/load_usd_stage.py << 'EOF'
-        import argparse
-        import sys
-        import os
-        import time
+    #     # Create the USD loader script dynamically
+    #     cat > ./aurasim_output/load_usd_stage.py << 'EOF'
+    #     import argparse
+    #     import sys
+    #     import os
+    #     import time
 
-        from isaacsim import SimulationApp
+    #     from isaacsim import SimulationApp
 
-        # Configuration for headless simulation optimized for CI
-        CONFIG = {
-            "width": 1280,
-            "height": 720,
-            "sync_loads": True,
-            "headless": True,
-            "renderer": "RaytracedLighting"
-        }
+    #     # Configuration for headless simulation optimized for CI
+    #     CONFIG = {
+    #         "width": 1280,
+    #         "height": 720,
+    #         "sync_loads": True,
+    #         "headless": True,
+    #         "renderer": "RaytracedLighting"
+    #     }
 
-        def main():
-            # Set up command line arguments
-            parser = argparse.ArgumentParser("AuraSIM CI USD Stage Loader")
-            parser.add_argument(
-                "--usd_path", type=str, help="Path to USD file", required=True
-            )
-            parser.add_argument(
-                "--headless", default=True, action="store_true", help="Run stage headless"
-            )
-            parser.add_argument(
-                "--timeout", type=int, default=300, help="Simulation timeout in seconds"
-            )
-            parser.add_argument(
-                "--output_dir", type=str, default="/output", help="Output directory for logs"
-            )
+    #     def main():
+    #         # Set up command line arguments
+    #         parser = argparse.ArgumentParser("AuraSIM CI USD Stage Loader")
+    #         parser.add_argument(
+    #             "--usd_path", type=str, help="Path to USD file", required=True
+    #         )
+    #         parser.add_argument(
+    #             "--headless", default=True, action="store_true", help="Run stage headless"
+    #         )
+    #         parser.add_argument(
+    #             "--timeout", type=int, default=300, help="Simulation timeout in seconds"
+    #         )
+    #         parser.add_argument(
+    #             "--output_dir", type=str, default="/output", help="Output directory for logs"
+    #         )
             
-            args, unknown = parser.parse_known_args()
+    #         args, unknown = parser.parse_known_args()
             
-            # Ensure headless mode for CI
-            CONFIG["headless"] = args.headless
+    #         # Ensure headless mode for CI
+    #         CONFIG["headless"] = args.headless
             
-            print(f"Starting Isaac Sim with USD: {args.usd_path}")
-            print(f"Headless mode: {args.headless}")
-            print(f"Timeout: {args.timeout} seconds")
+    #         print(f"Starting Isaac Sim with USD: {args.usd_path}")
+    #         print(f"Headless mode: {args.headless}")
+    #         print(f"Timeout: {args.timeout} seconds")
             
-            # Start the omniverse application
-            kit = SimulationApp(launch_config=CONFIG)
+    #         # Start the omniverse application
+    #         kit = SimulationApp(launch_config=CONFIG)
             
-            import carb
-            import omni
+    #         import carb
+    #         import omni
             
-            try:
-                # Check if USD file exists
-                if not os.path.exists(args.usd_path):
-                    carb.log_error(f"USD file not found: {args.usd_path}")
-                    kit.close()
-                    sys.exit(1)
+    #         try:
+    #             # Check if USD file exists
+    #             if not os.path.exists(args.usd_path):
+    #                 carb.log_error(f"USD file not found: {args.usd_path}")
+    #                 kit.close()
+    #                 sys.exit(1)
                 
-                print(f"Loading USD stage: {args.usd_path}")
+    #             print(f"Loading USD stage: {args.usd_path}")
                 
-                # Open the USD stage
-                omni.usd.get_context().open_stage(args.usd_path)
+    #             # Open the USD stage
+    #             omni.usd.get_context().open_stage(args.usd_path)
                 
-                # Wait two frames so that stage starts loading
-                kit.update()
-                kit.update()
+    #             # Wait two frames so that stage starts loading
+    #             kit.update()
+    #             kit.update()
                 
-                print("Loading stage...")
-                from isaacsim.core.utils.stage import is_stage_loading
+    #             print("Loading stage...")
+    #             from isaacsim.core.utils.stage import is_stage_loading
                 
-                # Wait for stage to load completely
-                stage_load_start = time.time()
-                while is_stage_loading():
-                    kit.update()
-                    if time.time() - stage_load_start > 60:  # 60 second timeout for loading
-                        carb.log_error("Stage loading timed out")
-                        kit.close()
-                        sys.exit(1)
+    #             # Wait for stage to load completely
+    #             stage_load_start = time.time()
+    #             while is_stage_loading():
+    #                 kit.update()
+    #                 if time.time() - stage_load_start > 60:  # 60 second timeout for loading
+    #                     carb.log_error("Stage loading timed out")
+    #                     kit.close()
+    #                     sys.exit(1)
                 
-                print("✅ Stage loading complete")
+    #             print("✅ Stage loading complete")
                 
-                # Start timeline/simulation
-                timeline = omni.timeline.get_timeline_interface()
-                timeline.play()
-                print("🎬 Simulation started")
+    #             # Start timeline/simulation
+    #             timeline = omni.timeline.get_timeline_interface()
+    #             timeline.play()
+    #             print("🎬 Simulation started")
                 
-                # Create stop signal file checker
-                stop_signal_path = "/tmp/stop_simulation"
-                simulation_start = time.time()
+    #             # Create stop signal file checker
+    #             stop_signal_path = "/tmp/stop_simulation"
+    #             simulation_start = time.time()
                 
-                print("🔄 Simulation running... (waiting for stop signal or timeout)")
+    #             print("🔄 Simulation running... (waiting for stop signal or timeout)")
                 
-                # Main simulation loop
-                while kit.is_running():
-                    # Check for stop signal file
-                    if os.path.exists(stop_signal_path):
-                        print("🛑 Stop signal received, shutting down...")
-                        break
+    #             # Main simulation loop
+    #             while kit.is_running():
+    #                 # Check for stop signal file
+    #                 if os.path.exists(stop_signal_path):
+    #                     print("🛑 Stop signal received, shutting down...")
+    #                     break
                     
-                    # Check timeout
-                    if time.time() - simulation_start > args.timeout:
-                        print(f"⏰ Simulation timeout reached ({args.timeout}s)")
-                        break
+    #                 # Check timeout
+    #                 if time.time() - simulation_start > args.timeout:
+    #                     print(f"⏰ Simulation timeout reached ({args.timeout}s)")
+    #                     break
                     
-                    # Update simulation
-                    kit.update()
-                    time.sleep(0.01)  # Small delay to prevent excessive CPU usage
+    #                 # Update simulation
+    #                 kit.update()
+    #                 time.sleep(0.01)  # Small delay to prevent excessive CPU usage
                 
-                # Stop timeline
-                timeline.stop()
-                print("⏹️  Simulation stopped")
+    #             # Stop timeline
+    #             timeline.stop()
+    #             print("⏹️  Simulation stopped")
                 
-                # Write completion status
-                status_file = os.path.join(args.output_dir, "simulation_status.txt")
-                with open(status_file, "w") as f:
-                    f.write("completed\n")
+    #             # Write completion status
+    #             status_file = os.path.join(args.output_dir, "simulation_status.txt")
+    #             with open(status_file, "w") as f:
+    #                 f.write("completed\n")
                 
-                print("✅ Simulation completed successfully")
+    #             print("✅ Simulation completed successfully")
                 
-            except Exception as e:
-                carb.log_error(f"Simulation error: {str(e)}")
+    #         except Exception as e:
+    #             carb.log_error(f"Simulation error: {str(e)}")
                 
-                # Write error status
-                status_file = os.path.join(args.output_dir, "simulation_status.txt")
-                with open(status_file, "w") as f:
-                    f.write(f"error: {str(e)}\n")
+    #             # Write error status
+    #             status_file = os.path.join(args.output_dir, "simulation_status.txt")
+    #             with open(status_file, "w") as f:
+    #                 f.write(f"error: {str(e)}\n")
                 
-                kit.close()
-                sys.exit(1)
+    #             kit.close()
+    #             sys.exit(1)
             
-            finally:
-                kit.close()
+    #         finally:
+    #             kit.close()
 
-        if __name__ == "__main__":
-            main()
-        EOF
+    #     if __name__ == "__main__":
+    #         main()
+    #     EOF
 
-        # Start Isaac Sim container in background
-        docker run -d \
-          --name $ISAAC_SIM_CONTAINER_NAME \
-          --entrypoint bash \
-          --runtime=nvidia \
-          --gpus all \
-          --network aurasim-network-${{ github.run_id }} \
-          -e "ACCEPT_EULA=Y" \
-          -e "PRIVACY_CONSENT=Y" \
-          -e "HEADLESS=true" \
-          -e "DISPLAY=:0" \
-          -v "$(dirname $USD_ABSOLUTE_PATH):/workspace" \
-          -v "./aurasim_output:/output" \
-          ${{ inputs.isaac_sim_image }} \
-          -c "
-            echo 'Starting Isaac Sim with USD stage loader...' && \
-            /isaac-sim/python.sh /output/load_usd_stage.py \
-              --usd_path /workspace/$(basename $USD_ABSOLUTE_PATH) \
-              --headless \
-              --timeout ${{ inputs.timeout }} \
-              --output_dir /output \
-              2>&1 | tee /output/isaac_sim.log
-          "
+    #     # Start Isaac Sim container in background
+    #     docker run -d \
+    #       --name $ISAAC_SIM_CONTAINER_NAME \
+    #       --entrypoint bash \
+    #       --runtime=nvidia \
+    #       --gpus all \
+    #       --network aurasim-network-${{ github.run_id }} \
+    #       -e "ACCEPT_EULA=Y" \
+    #       -e "PRIVACY_CONSENT=Y" \
+    #       -e "HEADLESS=true" \
+    #       -e "DISPLAY=:0" \
+    #       -v "$(dirname $USD_ABSOLUTE_PATH):/workspace" \
+    #       -v "./aurasim_output:/output" \
+    #       ${{ inputs.isaac_sim_image }} \
+    #       -c "
+    #         echo 'Starting Isaac Sim with USD stage loader...' && \
+    #         /isaac-sim/python.sh /output/load_usd_stage.py \
+    #           --usd_path /workspace/$(basename $USD_ABSOLUTE_PATH) \
+    #           --headless \
+    #           --timeout ${{ inputs.timeout }} \
+    #           --output_dir /output \
+    #           2>&1 | tee /output/isaac_sim.log
+    #       "
 
-        # Wait for Isaac Sim to be ready
-        echo "⏳ Waiting for Isaac Sim to initialize..."
-        sleep 10
+    #     # Wait for Isaac Sim to be ready
+    #     echo "⏳ Waiting for Isaac Sim to initialize..."
+    #     sleep 10
 
-        # Check if Isaac Sim container is running
-        if docker ps --filter "name=$ISAAC_SIM_CONTAINER_NAME" --filter "status=running" | grep -q $ISAAC_SIM_CONTAINER_NAME; then
-          echo "✅ Isaac Sim started successfully"
-        else
-          echo "❌ Failed to start Isaac Sim"
-          docker logs $ISAAC_SIM_CONTAINER_NAME
-          exit 1
-        fi
+    #     # Check if Isaac Sim container is running
+    #     if docker ps --filter "name=$ISAAC_SIM_CONTAINER_NAME" --filter "status=running" | grep -q $ISAAC_SIM_CONTAINER_NAME; then
+    #       echo "✅ Isaac Sim started successfully"
+    #     else
+    #       echo "❌ Failed to start Isaac Sim"
+    #       docker logs $ISAAC_SIM_CONTAINER_NAME
+    #       exit 1
+    #     fi
 
     # Step 3: Start the robot Docker
     - name: "Step 3: Start Robot Docker Container"
       shell: bash
       run: |
-        echo "=== Step 3: Starting robot Docker container ==="
-
-        # Start robot container
-        docker run -d \
-          --name $ROBOT_CONTAINER_NAME \
-          --network aurasim-network-${{ github.run_id }} \
-          -v "./aurasim_output:/output" \
-          -v "/home/ubuntu/persistentStorage/logs:/tmp/logs" \
-          -e ISAAC_SIM_HOST=$ISAAC_SIM_CONTAINER_NAME \
-          -e OUTPUT_DIR=/output \
-          ${{ inputs.robot_docker_image }} \
-          tail -f /dev/null
+        echo "=== Step 3: Starting robot Docker container with docker compose ==="
+        cd /home/ubuntu/persistentStorage/10x_ws/10xCode
+        docker compose \
+          -f .devcontainer/docker-compose.yml \
+          -f .devcontainer/docker-compose-pull.yml \
+          up -d
 
         # Check if robot container is running
-        if docker ps --filter "name=$ROBOT_CONTAINER_NAME" --filter "status=running" | grep -q $ROBOT_CONTAINER_NAME; then
-          echo "✅ Robot container started successfully"
+        if docker compose ps | grep -q "running"; then
+          echo "✅ Robot container(s) started successfully"
         else
-          echo "❌ Failed to start robot container"
-          docker logs $ROBOT_CONTAINER_NAME
+          echo "❌ Failed to start robot container(s)"
+          docker compose logs
           exit 1
         fi
+
 
     # Step 4: Invoke the robot start command
     - name: "Step 4: Execute Robot Start Command"
@@ -289,7 +284,7 @@ runs:
         echo "🤖 Running command: ${{ inputs.robot_start_cmd }}"
 
         # Execute the robot command in the container
-        docker exec $ROBOT_CONTAINER_NAME ${{ inputs.robot_start_cmd }} &
+        docker exec devcontainer-ros2_dev-1 ${{ inputs.robot_start_cmd }} &
 
         ROBOT_PID=$!
         echo "ROBOT_PID=$ROBOT_PID" >> $GITHUB_ENV
@@ -306,31 +301,11 @@ runs:
         ROBOT_FINISHED=false
 
         while [ $ELAPSED -lt $TIMEOUT_SECONDS ]; do
-          # Check if robot process is still running
-          if ! kill -0 $ROBOT_PID 2>/dev/null; then
-            echo "🤖 Robot process has finished"
-            ROBOT_FINISHED=true
-            break
-          fi
-          
-          # Check container health
-          if ! docker ps --filter "name=$ISAAC_SIM_CONTAINER_NAME" --filter "status=running" | grep -q $ISAAC_SIM_CONTAINER_NAME; then
-            echo "❌ Isaac Sim container stopped unexpectedly"
-            exit 1
-          fi
-          
-          if ! docker ps --filter "name=$ROBOT_CONTAINER_NAME" --filter "status=running" | grep -q $ROBOT_CONTAINER_NAME; then
-            echo "❌ Robot container stopped unexpectedly"
-            exit 1
-          fi
           
           echo "⏳ Simulation running... (${ELAPSED}/${TIMEOUT_SECONDS}s)"
           sleep 5
           ELAPSED=$((ELAPSED + 5))
         done
-
-        # Signal Isaac Sim to stop
-        docker exec $ISAAC_SIM_CONTAINER_NAME touch /tmp/stop_simulation
 
         if [ "$ROBOT_FINISHED" = "false" ]; then
           echo "⏰ Simulation timed out after $TIMEOUT_SECONDS seconds"
@@ -346,38 +321,8 @@ runs:
       if: always()
       run: |
         echo "=== Step 6: Cleanup and exit status determination ==="
-
-        # Get robot exit code from container before removing it
-        ROBOT_EXIT_CODE=0
-        if docker ps -a --filter "name=$ROBOT_CONTAINER_NAME" --format "table {{.Names}}" | grep -q $ROBOT_CONTAINER_NAME; then
-          ROBOT_EXIT_CODE=$(docker inspect $ROBOT_CONTAINER_NAME --format='{{.State.ExitCode}}' 2>/dev/null || echo "1")
-          echo "🤖 Robot container exit code: $ROBOT_EXIT_CODE"
-        fi
-
-        # Collect logs
-        echo "📋 Collecting logs..."
-        docker logs $ISAAC_SIM_CONTAINER_NAME > ./aurasim_output/isaac_sim_container.log 2>&1 || true
-        docker logs $ROBOT_CONTAINER_NAME > ./aurasim_output/robot_container.log 2>&1 || true
-
-        # Cleanup containers and network (force removal)
-        echo "🧹 Cleaning up containers..."
-        docker rm -f $ISAAC_SIM_CONTAINER_NAME $ROBOT_CONTAINER_NAME || true
-        docker network rm aurasim-network-${{ github.run_id }} || true
-
-        # Calculate duration
-        SIMULATION_END_TIME=$(date +%s)
-        DURATION=$((SIMULATION_END_TIME - SIMULATION_START_TIME))
-        echo "⏱️  Total simulation duration: ${DURATION} seconds"
-
-        exit 0
-        # Determine final status
-        # if [ "$SIMULATION_STATUS" = "timeout" ]; then
-        #   echo "❌ FINAL STATUS: TIMEOUT (after ${{ inputs.timeout }} seconds)"
-        #   exit 1
-        # elif [ $ROBOT_EXIT_CODE -eq 0 ]; then
-        #   echo "✅ FINAL STATUS: SUCCESS (robot exited cleanly)"
-        #   exit 0
-        # else
-        #   echo "❌ FINAL STATUS: FAILURE (robot exit code: $ROBOT_EXIT_CODE)"
-        #   exit 1
-        # fi
+        cd /home/ubuntu/persistentStorage/10x_ws/10xCode
+        docker compose \
+          -f .devcontainer/docker-compose.yml \
+          -f .devcontainer/docker-compose-pull.yml \
+          down
