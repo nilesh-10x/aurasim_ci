@@ -281,43 +281,34 @@ runs:
         fi
 
 
-    # Step 4: Invoke the robot start command
-    - name: "Step 4: Execute Robot Start Command"
+    - name: "Step 4 & 5: Start Robot and Monitor"
       shell: bash
       run: |
-        echo "=== Step 4: Executing robot start command ==="
-        echo "🤖 Running command: ${{ inputs.robot_start_cmd }}"
-
-        # Execute the robot command in the container
+        echo "=== Step 4: Executing robot start command in background ==="
         docker exec devcontainer-ros2_dev-1 ${{ inputs.robot_start_cmd }} &
-
         ROBOT_PID=$!
         echo "ROBOT_PID=$ROBOT_PID" >> $GITHUB_ENV
         echo "✅ Robot command started with PID: $ROBOT_PID"
 
-    # Step 5: Wait till exit signal
-    - name: "Step 5: Monitor Simulation and Wait for Exit"
-      shell: bash
-      run: |
         echo "=== Step 5: Monitoring simulation progress ==="
-
         TIMEOUT_SECONDS=${{ inputs.timeout }}
         ELAPSED=0
-        ROBOT_FINISHED=false
 
         while [ $ELAPSED -lt $TIMEOUT_SECONDS ]; do
-          
+          if ! kill -0 $ROBOT_PID 2>/dev/null; then
+            echo "✅ Robot process exited before timeout"
+            echo "SIMULATION_STATUS=completed" >> $GITHUB_ENV
+            exit 0
+          fi
           echo "⏳ Simulation running... (${ELAPSED}/${TIMEOUT_SECONDS}s)"
           sleep 5
           ELAPSED=$((ELAPSED + 5))
         done
 
-        if [ "$ROBOT_FINISHED" = "false" ]; then
-          echo "⏰ Simulation timed out after $TIMEOUT_SECONDS seconds"
-          echo "SIMULATION_STATUS=timeout" >> $GITHUB_ENV
-        else
-          echo "✅ Simulation completed within timeout"
-          echo "SIMULATION_STATUS=completed" >> $GITHUB_ENV
+        echo "⏰ Simulation timed out after $TIMEOUT_SECONDS seconds"
+        echo "SIMULATION_STATUS=timeout" >> $GITHUB_ENV
+        kill $ROBOT_PID || true
+
         fi
 
     # Step 6: Exit (success/failure)
