@@ -261,7 +261,6 @@ runs:
       shell: bash
       run: |
         echo "=== Step 3: Starting robot Docker container with docker compose ==="
-        xhost +local:root
         export DISPLAY=:0
         cd /home/ubuntu/persistentStorage/10x_ws/10xCode
         docker compose \
